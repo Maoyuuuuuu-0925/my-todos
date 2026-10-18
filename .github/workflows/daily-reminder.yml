@@ -2,7 +2,8 @@ name: daily-todo-reminder
 
 on:
   schedule:
-    - cron: '0 0 * * *'   # UTC 0点 = 北京时间 8:00
+    - cron: '0 6 * * *'    # UTC 6点  = 北京时间 14:00
+    - cron: '0 12 * * *'   # UTC 12点 = 北京时间 20:00
   workflow_dispatch:
 
 jobs:
@@ -16,12 +17,22 @@ jobs:
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
         run: |
           python3 - <<'PY'
-          import json, os, urllib.request
+          import json, os, random, urllib.request
+
+          GREETINGS = [
+              "下午/晚上好，Angela",
+              "Angela，有新的想法吗？",
+              "很高兴为你播报，Angela",
+          ]
 
           with open('todos.json', encoding='utf-8') as f:
               todos = json.load(f)
 
-          lines = ["📋 今日待办："]
+          # 按日期升序：日期越近越靠前；没有日期的排最后
+          todos.sort(key=lambda t: t.get('date') or '9999-99-99')
+
+          greeting = random.choice(GREETINGS)
+          lines = [greeting, "", "📋 今日待办："]
           for t in todos:
               lines.append(f"- {t['title']}（{t.get('date', '')}）")
 
