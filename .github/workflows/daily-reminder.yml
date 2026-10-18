@@ -4,6 +4,7 @@ on:
   schedule:
     - cron: '0 6 * * *'    # UTC 6点  = 北京时间 14:00
     - cron: '0 12 * * *'   # UTC 12点 = 北京时间 20:00
+    - cron: '0 14 * * *'   # UTC 14点 = 北京时间 22:00
   workflow_dispatch:
 
 jobs:
