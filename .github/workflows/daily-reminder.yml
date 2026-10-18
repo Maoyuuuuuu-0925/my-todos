@@ -1,7 +1,12 @@
 name: daily-todo-reminder
 
 on:
-  workflow_dispatch:        # 只保留这一种触发方式，由 cron-job.org 调用
+  schedule:
+    - cron: '1 6 * * *'    # 北京时间 14:00
+    - cron: '1 12 * * *'   # 北京时间 20:00
+    - cron: '12 15 * * *'   # 北京时间 22:00
+    - cron: '0 1 * * 1'    # 周报：UTC 周一 1点 = 北京时间周一 09:00
+  workflow_dispatch:
 
 jobs:
   remind:
@@ -12,6 +17,7 @@ jobs:
       - name: Push to WeCom
         env:
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+          SCHEDULE: ${{ github.event.schedule }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
           python3 - <<'PY'
@@ -52,9 +58,10 @@ jobs:
               t['_date'] = parse_date(t.get('date'))
 
           today = date.today()
-
-          # 通过环境变量判断是否周报：cron-job.org 触发时传 WEEKLY=1 即可
-          is_weekly = os.environ.get('WEEKLY') == '1'
+          is_weekly = (
+              os.environ.get('EVENT_NAME') == 'schedule'
+              and os.environ.get('SCHEDULE', '').strip() == '0 1 * * 1'
+          )
 
           if is_weekly:
               done_items = [t for t in todos if t['status'] == 'done']
@@ -110,3 +117,4 @@ jobs:
               lines += ["", f"✅ 已完成 {done_count}/{total} 项，剩余 {todo_count} 项待办"]
               send("\n".join(lines))
           PY
+          
