@@ -2,9 +2,9 @@ name: daily-todo-reminder
 
 on:
   schedule:
-    - cron: '0 6 * * *'    # 北京时间 14:00
-    - cron: '0 12 * * *'   # 北京时间 20:00
-    - cron: '0 15 * * *'   # 北京时间 22:00
+    - cron: '1 6 * * *'    # 北京时间 14:00
+    - cron: '1 12 * * *'   # 北京时间 20:00
+    - cron: '12 15 * * *'   # 北京时间 22:00
     - cron: '0 1 * * 1'    # 周报：UTC 周一 1点 = 北京时间周一 09:00
   workflow_dispatch:
 
