@@ -1,0 +1,40 @@
+name: daily-todo-reminder
+
+on:
+  schedule:
+    - cron: '0 0 * * *'   # UTC 0点 = 北京时间 8:00
+  workflow_dispatch:
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push todos to WeCom
+        env:
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+
+          with open('todos.json', encoding='utf-8') as f:
+              todos = json.load(f)
+
+          lines = ["📋 今日待办："]
+          for t in todos:
+              lines.append(f"- {t['title']}（{t.get('date', '')}）")
+
+          content = "\n".join(lines)
+          data = json.dumps({
+              "msgtype": "text",
+              "text": {"content": content}
+          }).encode('utf-8')
+
+          req = urllib.request.Request(
+              os.environ['WEBHOOK_URL'],
+              data=data,
+              headers={'Content-Type': 'application/json'}
+          )
+          urllib.request.urlopen(req)
+          PY
