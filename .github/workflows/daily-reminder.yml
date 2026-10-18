@@ -2,9 +2,10 @@ name: daily-todo-reminder
 
 on:
   schedule:
-    - cron: '0 6 * * *'    # UTC 6点  = 北京时间 14:00
-    - cron: '0 12 * * *'   # UTC 12点 = 北京时间 20:00
-    - cron: '0 14 * * *'   # UTC 14点 = 北京时间 22:00
+    - cron: '0 6 * * *'    # 北京时间 14:00
+    - cron: '0 12 * * *'   # 北京时间 20:00
+    - cron: '0 14 * * *'   # 北京时间 22:00
+    - cron: '0 1 * * 1'    # 周报：UTC 周一 1点 = 北京时间周一 09:00
   workflow_dispatch:
 
 jobs:
@@ -13,12 +14,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Push todos to WeCom
+      - name: Push to WeCom
         env:
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+          SCHEDULE: ${{ github.event.schedule }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           python3 - <<'PY'
           import json, os, random, urllib.request
+          from datetime import date, datetime, timedelta
 
           GREETINGS = [
               "下午/晚上好，Angela",
@@ -26,27 +30,90 @@ jobs:
               "很高兴为你播报，Angela",
           ]
 
+          def parse_date(s):
+              if not s:
+                  return None
+              try:
+                  return datetime.strptime(s, '%Y-%m-%d').date()
+              except ValueError:
+                  return None
+
+          def send(content):
+              data = json.dumps({
+                  "msgtype": "text",
+                  "text": {"content": content}
+              }).encode('utf-8')
+              req = urllib.request.Request(
+                  os.environ['WEBHOOK_URL'],
+                  data=data,
+                  headers={'Content-Type': 'application/json'}
+              )
+              urllib.request.urlopen(req)
+
           with open('todos.json', encoding='utf-8') as f:
               todos = json.load(f)
 
-          # 按日期升序：日期越近越靠前；没有日期的排最后
-          todos.sort(key=lambda t: t.get('date') or '9999-99-99')
-
-          greeting = random.choice(GREETINGS)
-          lines = [greeting, "", "📋 今日待办："]
           for t in todos:
-              lines.append(f"- {t['title']}（{t.get('date', '')}）")
+              t.setdefault('status', 'todo')
+              t['_date'] = parse_date(t.get('date'))
 
-          content = "\n".join(lines)
-          data = json.dumps({
-              "msgtype": "text",
-              "text": {"content": content}
-          }).encode('utf-8')
-
-          req = urllib.request.Request(
-              os.environ['WEBHOOK_URL'],
-              data=data,
-              headers={'Content-Type': 'application/json'}
+          today = date.today()
+          is_weekly = (
+              os.environ.get('EVENT_NAME') == 'schedule'
+              and os.environ.get('SCHEDULE', '').strip() == '0 1 * * 1'
           )
-          urllib.request.urlopen(req)
+
+          if is_weekly:
+              done_items = [t for t in todos if t['status'] == 'done']
+              todo_items = [t for t in todos if t['status'] != 'done']
+              week_ago = today - timedelta(days=7)
+              done_this_week = [
+                  t for t in done_items
+                  if t['_date'] and week_ago <= t['_date'] <= today
+              ]
+              overdue = sorted(
+                  [t for t in todo_items if t['_date'] and t['_date'] < today],
+                  key=lambda t: t['_date']
+              )
+              upcoming = sorted(
+                  [t for t in todo_items
+                   if t['_date'] and today <= t['_date'] <= today + timedelta(days=7)],
+                  key=lambda t: t['_date']
+              )
+
+              lines = [
+                  "📊 本周周报，Angela",
+                  "",
+                  f"📝 当前待办：{len(todo_items)} 项",
+                  f"✅ 当前已完成：{len(done_items)} 项",
+                  f"🎯 过去7天（按计划日期）完成：{len(done_this_week)} 项",
+              ]
+              if overdue:
+                  lines += ["", "⚠️ 逾期待办："]
+                  for t in overdue:
+                      lines.append(f"- {t['title']}（{t['date']}）")
+              if upcoming:
+                  lines += ["", "📅 未来7天待办："]
+                  for t in upcoming:
+                      lines.append(f"- {t['title']}（{t['date']}）")
+              send("\n".join(lines))
+
+          else:
+              todo_items = sorted(
+                  [t for t in todos if t['status'] != 'done'],
+                  key=lambda t: t['_date'] or date(9999, 12, 31)
+              )
+              total = len(todos)
+              done_count = sum(1 for t in todos if t['status'] == 'done')
+              todo_count = total - done_count
+
+              greeting = random.choice(GREETINGS)
+              lines = [greeting, "", "📋 今日待办："]
+              if todo_items:
+                  for t in todo_items:
+                      lines.append(f"- {t['title']}（{t.get('date', '')}）")
+              else:
+                  lines.append("- （暂无待办，休息一下吧）")
+              lines += ["", f"✅ 已完成 {done_count}/{total} 项，剩余 {todo_count} 项待办"]
+              send("\n".join(lines))
           PY
